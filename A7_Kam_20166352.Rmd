@@ -1,0 +1,180 @@
+---
+title: "A7_Kam_20166352"
+author: "Sam Kam"
+date: "2023-02-27"
+output: html_document
+---
+# Dragon and Other Phylogenies
+
+[GitHub Repository](https://github.com/samkam48/BIOL432_Assignment7)
+
+## Setup
+
+```{r}
+#import libraries
+library(ape)
+library(reshape2)
+library(ggplot2)
+library(BiocManager)
+#BiocManager::install("ggtree")
+library(ggtree)
+
+#import data
+DragonNexus <- read.nexus.data("./data/DragonMatrix.nex")
+
+TraitMatrixRaw <- read.csv("./data/TraitMatrixRaw.csv", header = T)
+
+WeightsDat <- read.csv("./data/Weights.csv", header=T)
+```
+
+## Expanding the Dragon Phylogeny
+
+**1. write code to append your dragons to the nexus dataset. Save this in a folder called 'input' and add characteristics for each of your 3 dragons**
+
+```{r}
+#create vectors to add to nexus file
+Dragon1 <- "100100000000100110000100010111110000010000001100001100101100011000000000000100"
+Dragon2 <- "100100000010000100001000010110011000000000001100001000101100010000000010011100"
+Dragon3 <- "100100000000100110000100011110111000000000001000001000101100111110000000011100"
+
+#use regex to make each number in quotation
+Dragon1 <- strsplit(Dragon1, split = "")
+Dragon2 <- strsplit(Dragon2, split = "")
+Dragon3 <- strsplit(Dragon3, split = "")
+
+#add new dragons to list
+list <- append(DragonNexus, Dragon1)
+list2 <- append(list, Dragon2)
+NewDragonNexus <- append(list2, Dragon3)
+
+#rename list name
+names(NewDragonNexus)[78:80] <- c("75Canada", "76Canada", "77Canada")
+
+#unlist list object to make it a vector before converting to matrix
+DragonNexusDF <- data.frame(matrix(unlist(NewDragonNexus), ncol = 78, byrow = T))
+row.names(DragonNexusDF) <- names(NewDragonNexus)
+head(DragonNexusDF)
+```
+
+**2. Apply the same trait weightings as those used in the Dragon Phylogeny Tutorial.**
+
+```{r}
+#create single vector of weights
+Weights <- paste0(WeightsDat$Weight, collapse = "")
+Weights <- strsplit(Weights, split = "")[[1]]
+
+#convert letter to value
+which(LETTERS == "G")
+
+WeightsNum <- rep(NA, length(Weights))
+for(i in 1: length(WeightsNum)){
+  if(Weights[i] %in% LETTERS){
+    WeightsNum[i] <- which(LETTERS == Weights[i]) + 9
+  } else {
+    WeightsNum[i] <- Weights[i]
+  }
+}
+
+WeightsNum <- as.numeric(WeightsNum)
+
+length(WeightsNum)
+
+#multiply weight value by trait vector for each dragon
+WeightDragonNexus <- NewDragonNexus
+for (i in 1:length(NewDragonNexus)) {
+  RepWeight <- NewDragonNexus[[i]] == 1
+  WeightDragonNexus[[i]][RepWeight] <- WeightsNum[RepWeight]
+  RepWeight <- NA
+}
+```
+
+**3. Embed images showing your dragon choices in your R markdown report.If you downloaded images then make sure you cite the original source (e.g. creator) as well as they hyperlink (http://) in your R markdown file **
+
+```{r}
+knitr::include_graphics("./images/dragon1.webp")
+knitr::include_graphics("./images/dragon2.jpg")
+knitr::include_graphics("./images/dragon3.jpg")
+```
+
+Dragon 1: https://pixabay.com/illustrations/ai-generated-baby-dragon-cute-7705365/
+
+Dragon 2: https://www.deviantart.com/st0n3zy/art/Cute-Kawaii-dragon-939487728
+
+Dragon 3: https://www.creativefabrica.com/product/cute-baby-dragon-lilac-dragon-girl/
+
+**4. Create a visually attractive phylogeny. Use coloured lines to highlight the lineages where your dragons appear on the Dragon Phylogeny.**
+
+```{r}
+#distance matrix
+WeightDragonNexusDF <- data.frame(matrix(unlist(WeightDragonNexus), ncol = 78, byrow = T))
+row.names(WeightDragonNexusDF) <- names(WeightDragonNexus)
+WeightDragonDist <- dist(WeightDragonNexusDF, method = "euclidean")
+
+WeightDragonDistMat <- as.matrix(WeightDragonDist)
+
+#visualize data (Figure 1)
+WeightPDat <- melt(WeightDragonDistMat)
+
+ggplot(data = WeightPDat, aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile() +
+  scale_fill_gradientn(colours = c("white", "cyan", "purple", "pink")) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+```
+
+```{r}
+#plot tree
+WeightDragonTree <- fastme.bal(WeightDragonDist)
+WeightDragonTree <- nj(WeightDragonDist)
+
+#examine data
+str(WeightDragonTree)
+head(WeightDragonTree$tip.label)
+
+#organize by country (Figure 2)
+Country <- gsub("[0.9\\.]+([^X]+)X*","\\1", WeightDragonTree$tip.label)
+CountryGroups <- split(WeightDragonTree$tip.label, Country)
+WeightDTcol <- ggtree::groupOTU(WeightDragonTree, CountryGroups)
+str(WeightDTcol)
+
+ggtree(WeightDTcol, layout = "circular", aes(colour = group)) +
+  geom_tiplab(size = 2, aes(angle = angle))
+
+#used below tree to look at node numbers to determine how to organize by clade...
+#ggtree(WeightDTcol, layout = "rectangular", aes(colour = group)) +
+ # geom_tiplab(size = 3, aes(angle = angle)) +
+  #geom_text(aes(label=node), hjust=-.3) +
+  #theme(legend.position = "none")
+
+#organize by clade (Figure 3)
+#this did not work how I wanted it to... 
+WeightDTclade <- groupClade(WeightDragonTree, .node = c(123, 108, 106, 105, 85))
+ggtree(WeightDTclade, layout = "rectangular", aes(colour = group)) +
+  geom_cladelabel(node = 123, label = "Gryffindor",
+                  hjust = 0.5, offset.text = 4,
+                  fontsize = 3, angle = -45) +
+  geom_cladelabel(node = 108, label = "Slytherin",
+                  hjust = 0.5, offset.text = 4,
+                  fontsize = 3, angle = 15) +
+  geom_cladelabel(node = 106, label = "Ravenclaw",
+                  hjust = 0.5, offset.text = 4,
+                  fontsize = 3, angle = 40) +
+  geom_cladelabel(node = 105, label = "Hufflepuff",
+                  hjust = 0.5, offset.text = 4,
+                  fontsize = 3, angle = -55) +
+  geom_cladelabel(node = 85, label = "Tudor",
+                  hjust = 0.5, offset.text = 6,
+                  fontsize = 3, angle = 55) +
+  xlim(NA, 60)
+```
+
+Figure 1: Distance matrix of dragon dataset. Data appears to have a good range of values to cluster by weights.
+
+Figure 2: Phylogeny split up by region. The three new dragons added are called "75Canada," "76Canada," and "77Canada."
+
+Figure 3: Phylogeny grouped in clade. The Orientalia clade is the most recently evolved group of dragons. We can see this as they are the farthest away from the center of the root. The Serpentidae clade is the ancestral lineage. 
+
+**5. Add fictional backstory and data interpretation. You can do this as a conventional paper (introduction, methods, results, discussion), or a more narrative style. Keep it concise.**
+
+Once upon a time, there was a komodo dragon that evolved into a fire-breathing dragon. Throughout time, many different kinds of dragons arose with different features and traits. By examining fossil records and living amongst the dragons, scientists were able to categorize each dragon into their own "breeds." They compared similarities and differences and determined the lineages of each dragon clade tracing back to its original ancestor. They found that the Serpentidae clade was the ancestral lineage while the Orientalia clade was the most recently evolved group of dragons. 
+
+They found new fossil records depicting 3 new dragons they had never seen before. In attempts to identify them, they took account each dragon's traits and added them to their pre-existing database. After running different analyses, they found that the 3 new dragons they discovered likely came from the same clade. There were many similar traits that the 3 dragons shared. 
